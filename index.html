@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Neon Cyber Ludo</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Orbitron & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <style>
+    :root {
+      --neon-red: #ff0055;
+      --neon-green: #00ff66;
+      --neon-yellow: #ffe600;
+      --neon-blue: #00f3ff;
+      --bg-dark: #0a0a14;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      background-color: var(--bg-dark);
+    }
+
+    .font-arcade {
+      font-family: 'Orbitron', monospace;
+    }
+
+    /* Scanlines backdrop */
+    .scanlines {
+      background: linear-gradient(rgba(18, 16, 24, 0) 50%, rgba(0, 0, 0, 0.45) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+    }
+
+    /* Glow utilities */
+    .glow-red { box-shadow: 0 0 15px rgba(255, 0, 85, 0.5); }
+    .glow-green { box-shadow: 0 0 15px rgba(0, 255, 102, 0.5); }
+    .glow-yellow { box-shadow: 0 0 15px rgba(255, 230, 0, 0.5); }
+    .glow-blue { box-shadow: 0 0 15px rgba(0, 243, 255, 0.5); }
+
+    .glow-text-red { text-shadow: 0 0 10px #ff0055; }
+    .glow-text-green { text-shadow: 0 0 10px #00ff66; }
+    .glow-text-yellow { text-shadow: 0 0 10px #ffe600; }
+    .glow-text-blue { text-shadow: 0 0 10px #00f3ff; }
+
+    /* 3D Dice Styles */
+    .dice-container {
+      perspective: 600px;
+    }
+    .dice-cube {
+      width: 60px;
+      height: 60px;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1.15);
+    }
+    .dice-cube.rolling {
+      animation: spinDice 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+    }
+    @keyframes spinDice {
+      0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+      50% { transform: rotateX(360deg) rotateY(180deg) rotateZ(180deg); }
+      100% { transform: rotateX(720deg) rotateY(360deg) rotateZ(360deg); }
+    }
+    .dice-face {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      background: #0f172a;
+      border: 2px solid #00f3ff;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      box-shadow: inset 0 0 12px rgba(0, 243, 255, 0.4), 0 0 10px rgba(0, 243, 255, 0.3);
+    }
+    .face-1 { transform: rotateY(0deg) translateZ(30px); }
+    .face-2 { transform: rotateY(90deg) translateZ(30px); }
+    .face-3 { transform: rotateY(180deg) translateZ(30px); }
+    .face-4 { transform: rotateY(-90deg) translateZ(30px); }
+    .face-5 { transform: rotateX(90deg) translateZ(30px); }
+    .face-6 { transform: rotateX(-90deg) translateZ(30px); }
+
+    .dice-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #00f3ff;
+      box-shadow: 0 0 6px #00f3ff;
+    }
+
+    /* Modal Backdrop Transitions */
+    .fade-enter {
+      animation: fadeIn 0.2s ease-out forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* Active Player Border Pulse */
+    .active-player-pulse {
+      animation: borderPulse 1.4s infinite alternate ease-in-out;
+    }
+    @keyframes borderPulse {
+      0% { border-color: rgba(255, 255, 255, 0.2); box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+      100% { border-color: currentColor; box-shadow: 0 0 15px currentColor; }
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 flex flex-col justify-between items-center relative overflow-x-hidden selection:bg-cyan-500 selection:text-black">
+  <!-- Scanline CRT Effect -->
+  <div class="fixed inset-0 scanlines z-30"></div>
+
+  <!-- Top Navigation & Dashboard -->
+  <header class="w-full max-w-4xl px-4 pt-3 pb-2 flex flex-col gap-2 z-20">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-3.5 h-3.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_#00f3ff]"></span>
+        <h1 class="text-xl sm:text-2xl font-arcade font-black tracking-wider text-cyan-400 glow-text-blue">
+          CYBER<span class="text-pink-500 glow-text-red">LUDO</span>
+        </h1>
+      </div>
+      
+      <!-- Action Toolbar -->
+      <div class="flex items-center gap-2">
+        <button id="btnSoundToggle" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-200 transition text-xs font-arcade">
+          🔊 SFX
+        </button>
+        <button id="btnWinnersHistory" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-yellow-400 text-yellow-400 transition text-xs font-arcade flex items-center gap-1">
+          🏆 HALL
+        </button>
+        <button id="btnGameConfig" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-pink-500 text-pink-400 transition text-xs font-arcade">
+          ⚙️ TEAMS
+        </button>
+        <button id="btnResetGame" class="px-2.5 py-1.5 rounded-xl bg-red-950/40 border border-red-700/60 hover:border-red-500 text-red-300 transition text-xs font-arcade">
+          ↻ RESTART
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Player Cards (4 Quadrants) -->
+    <div id="playerRoster" class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full pt-1">
+      <!-- Generated via JS for Red, Green, Yellow, Blue -->
+    </div>
+  </header>
+
+  <!-- Central Game Board & Roll Station -->
+  <main class="w-full max-w-4xl flex-1 px-3 py-1 flex flex-col lg:flex-row items-center justify-center gap-4 z-20">
+    
+    <!-- Neon Ludo Canvas Container -->
+    <div id="boardContainer" class="relative w-full max-w-[500px] aspect-square rounded-2xl p-1 bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 border-2 border-slate-700/80 shadow-[0_0_30px_rgba(0,0,0,0.8)] flex items-center justify-center">
+      <canvas id="ludoCanvas" class="w-full h-full rounded-xl cursor-pointer block"></canvas>
+      
+      <!-- Overlay Toast/Notification -->
+      <div id="gameNotification" class="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-cyan-400 text-cyan-300 font-arcade text-xs tracking-wider shadow-lg opacity-0 pointer-events-none transition-all duration-300 scale-90">
+        ROUND START
+      </div>
+    </div>
+
+    <!-- Cyber Controller & Dice Station -->
+    <div class="flex lg:flex-col items-center justify-center gap-4 w-full max-w-[500px] lg:w-48 bg-slate-900/80 border border-slate-800 p-3 sm:p-4 rounded-2xl backdrop-blur-md shadow-xl">
+      
+      <div class="text-center">
+        <p class="text-[10px] text-slate-400 uppercase tracking-widest font-semibold mb-1">Active Turn</p>
+        <div id="currentTurnBadge" class="font-arcade text-sm font-bold uppercase tracking-wide px-3 py-1 rounded-lg border border-cyan-400 bg-cyan-950/40 text-cyan-300 glow-text-blue">
+          RED TURN
+        </div>
+      </div>
+
+      <!-- Animated 3D Dice -->
+      <div class="flex flex-col items-center gap-2">
+        <div class="dice-container cursor-pointer p-2 rounded-2xl hover:bg-slate-800/40 transition" id="diceRollArea" title="Click or tap to Roll Dice">
+          <div id="diceCube" class="dice-cube">
+            <!-- Faces with dots -->
+            <div class="dice-face face-1">
+              <div class="dice-dot"></div>
+            </div>
+            <div class="dice-face face-2">
+              <div class="grid grid-cols-2 gap-3">
+                <div class="dice-dot"></div><div class="dice-dot"></div>
+              </div>
+            </div>
+            <div class="dice-face face-3">
+              <div class="flex flex-col justify-between h-8 w-8">
+                <div class="dice-dot self-start"></div>
+                <div class="dice-dot self-center"></div>
+                <div class="dice-dot self-end"></div>
+              </div>
+            </div>
+            <div class="dice-face face-4">
+              <div class="grid grid-cols-2 gap-3">
+                <div class="dice-dot"></div><div class="dice-dot"></div>
+                <div class="dice-dot"></div><div class="dice-dot"></div>
+              </div>
+            </div>
+            <div class="dice-face face-5">
+              <div class="relative w-8 h-8">
+                <div class="dice-dot absolute top-0 left-0"></div>
+                <div class="dice-dot absolute top-0 right-0"></div>
+                <div class="dice-dot absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></div>
+                <div class="dice-dot absolute bottom-0 left-0"></div>
+                <div class="dice-dot absolute bottom-0 right-0"></div>
+              </div>
+            </div>
+            <div class="dice-face face-6">
+              <div class="grid grid-cols-2 gap-x-3 gap-y-2">
+                <div class="dice-dot"></div><div class="dice-dot"></div>
+                <div class="dice-dot"></div><div class="dice-dot"></div>
+                <div class="dice-dot"></div><div class="dice-dot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button id="btnRollDice" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-arcade font-extrabold text-xs uppercase tracking-wider shadow-lg hover:shadow-cyan-500/50 hover:scale-105 active:scale-95 transition-all w-full">
+          ROLL DICE
+        </button>
+      </div>
+
+      <!-- Quick Status Hint -->
+      <div id="turnInstruction" class="text-[11px] text-slate-300 text-center font-medium max-w-[150px] leading-snug">
+        Tap Dice to Roll
+      </div>
+    </div>
+  </main>
+
+  <!-- Bottom Helper Bar -->
+  <footer class="w-full max-w-4xl px-4 py-2 flex items-center justify-between text-[11px] text-slate-500 z-20">
+    <div class="flex items-center gap-2">
+      <span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span>Safe Stars Shielded</span>
+    </div>
+    <div class="text-right">
+      <span>Roll 6 to Unlock Token</span>
+    </div>
+  </footer>
+
+  <!-- Modal: Game & Team Setup -->
+  <div id="modalSetup" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+        <h3 class="font-arcade text-lg font-bold text-cyan-400 glow-text-blue">TEAM CONFIGURATION</h3>
+        <button id="btnCloseSetup" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-xs uppercase text-slate-400 font-semibold mb-2">Number of Active Players</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button data-player-count="2" class="btn-player-count py-1.5 rounded-xl border border-slate-700 text-xs font-arcade text-slate-300">2 Players</button>
+          <button data-player-count="3" class="btn-player-count py-1.5 rounded-xl border border-slate-700 text-xs font-arcade text-slate-300">3 Players</button>
+          <button data-player-count="4" class="btn-player-count py-1.5 rounded-xl border border-cyan-400 bg-cyan-500/20 text-cyan-300 text-xs font-arcade">4 Players</button>
+        </div>
+      </div>
+
+      <!-- Player Customization List -->
+      <div id="teamEditList" class="flex flex-col gap-3 mb-5">
+        <!-- Rendered in JS -->
+      </div>
+
+      <button id="btnSaveConfig" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-arcade font-bold text-xs uppercase tracking-wider hover:opacity-95 transition">
+        Save & Apply Setup
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal: Hall of Fame (Previous Winners) -->
+  <div id="modalWinners" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative">
+      <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🏆</span>
+          <h3 class="font-arcade text-lg font-bold text-yellow-400 glow-text-yellow">HALL OF CHAMPIONS</h3>
+        </div>
+        <button id="btnCloseWinners" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div id="winnersListContainer" class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+        <!-- Injected via JS -->
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center">
+        <button id="btnClearWinners" class="text-xs text-red-400 hover:text-red-300 font-arcade">Clear History</button>
+        <button id="btnCloseWinnersFooter" class="px-4 py-1.5 rounded-xl bg-slate-800 text-slate-200 text-xs font-arcade hover:bg-slate-700">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Victory Fanfare -->
+  <div id="modalVictory" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md hidden items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border-2 border-yellow-400/80 rounded-2xl w-full max-w-sm p-6 text-center shadow-[0_0_40px_rgba(255,230,0,0.4)] relative">
+      <div class="text-5xl mb-2 animate-bounce">👑</div>
+      <h2 id="victoryWinnerTitle" class="text-2xl font-arcade font-black text-yellow-400 glow-text-yellow mb-1">
+        PLAYER WINS!
+      </h2>
+      <p id="victorySubText" class="text-slate-300 text-xs mb-5 font-semibold">Dominated the Neon Cyberspace!</p>
+      
+      <div id="victoryStatsBar" class="bg-slate-950 p-3 rounded-xl border border-slate-800 grid grid-cols-2 gap-2 text-xs mb-5">
+        <div>
+          <span class="text-slate-400 text-[10px] uppercase block">Total Turns</span>
+          <span id="victoryTurns" class="font-arcade font-bold text-cyan-300">0</span>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[10px] uppercase block">Total Captures</span>
+          <span id="victoryKills" class="font-arcade font-bold text-pink-400">0</span>
+        </div>
+      </div>
+
+      <button id="btnPlayAgain" class="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-400 via-amber-500 to-pink-500 text-slate-950 font-arcade font-black text-sm uppercase tracking-wider hover:scale-105 active:scale-95 shadow-lg transition">
+        PLAY AGAIN
+      </button>
+    </div>
+  </div>
+
+  <!-- Sound FX Engine (Pure Web Audio API) -->
+  <script>
+    class CyberSound {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playTone(freq, type = 'sine', duration = 0.08, vol = 0.15) {
+        if (!this.enabled || !this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
+      }
+      diceRoll() {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        for (let i = 0; i < 4; i++) {
+          setTimeout(() => {
+            this.playTone(280 + Math.random() * 160, 'sawtooth', 0.05, 0.08);
+          }, i * 65);
+        }
+      }
+      tokenStep() {
+        this.playTone(520, 'sine', 0.06, 0.12);
+      }
+      tokenOut() {
+        this.playTone(660, 'triangle', 0.1, 0.15);
+        setTimeout(() => this.playTone(880, 'sine', 0.12, 0.2), 80);
+      }
+      capture() {
+        this.playTone(180, 'sawtooth', 0.25, 0.3);
+        setTimeout(() => this.playTone(90, 'sawtooth', 0.35, 0.35), 70);
+      }
+      homeEntry() {
+        this.playTone(440, 'triangle', 0.09, 0.15);
+        setTimeout(() => this.playTone(587.33, 'triangle', 0.09, 0.15), 90);
+        setTimeout(() => this.playTone(880, 'sine', 0.25, 0.25), 180);
+      }
+      victory() {
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, idx) => {
+          setTimeout(() => this.playTone(freq, 'sine', 0.3, 0.25), idx * 120);
+        });
+      }
+    }
+
+    const sound = new CyberSound();
+  </script>
+
+  <!-- Ludo Core Engine & Board Graphics -->
+  <script>
+    // Constants & Color Definitions
+    const COLORS = {
+      RED: { id: 'red', name: 'Red Cyber', hex: '#ff0055', lightHex: '#ff6699', baseColor: '#380012' },
+      GREEN: { id: 'green', name: 'Green Matrix', hex: '#00ff66', lightHex: '#70ffaa', baseColor: '#002910' },
+      YELLOW: { id: 'yellow', name: 'Yellow Solar', hex: '#ffe600', lightHex: '#fff170', baseColor: '#332e00' },
+      BLUE: { id: 'blue', name: 'Blue Neon', hex: '#00f3ff', lightHex: '#80f9ff', baseColor: '#002830' }
+    };
+
+    const COLOR_KEYS = ['red', 'green', 'yellow', 'blue'];
+
+    // 15x15 Ludo Grid Coordinates Mapping
+    // 0 = Empty, 1-4 = Home bases, R/G/Y/B = Home Stretch Paths, S = Safe Star Cells
+    // Starting coordinates for common track (52 cells)
+    const COMMON_PATH = [
+      { r: 6, c: 1 },  { r: 6, c: 2 },  { r: 6, c: 3 },  { r: 6, c: 4 },  { r: 6, c: 5 }, // Red starting stretch
+      { r: 5, c: 6 },  { r: 4, c: 6 },  { r: 3, c: 6 },  { r: 2, c: 6 },  { r: 1, c: 6 },  { r: 0, c: 6 },
+      { r: 0, c: 7 },  { r: 0, c: 8 }, // Top turnaround
+      { r: 1, c: 8 },  { r: 2, c: 8 },  { r: 3, c: 8 },  { r: 4, c: 8 },  { r: 5, c: 8 },
+      { r: 6, c: 9 },  { r: 6, c: 10 }, { r: 6, c: 11 }, { r: 6, c: 12 }, { r: 6, c: 13 }, { r: 6, c: 14 },
+      { r: 7, c: 14 }, { r: 8, c: 14 }, // Right turnaround
+      { r: 8, c: 13 }, { r: 8, c: 12 }, { r: 8, c: 11 }, { r: 8, c: 10 }, { r: 8, c: 9 },
+      { r: 9, c: 8 },  { r: 10, c: 8 }, { r: 11, c: 8 }, { r: 12, c: 8 }, { r: 13, c: 8 }, { r: 14, c: 8 },
+      { r: 14, c: 7 }, { r: 14, c: 6 }, // Bottom turnaround
+      { r: 13, c: 6 }, { r: 12, c: 6 }, { r: 11, c: 6 }, { r: 10, c: 6 }, { r: 9, c: 6 },
+      { r: 8, c: 5 },  { r: 8, c: 4 },  { r: 8, c: 3 },  { r: 8, c: 2 },  { r: 8, c: 1 },  { r: 8, c: 0 },
+      { r: 7, c: 0 },  { r: 6, c: 0 } // Left turnaround back to start
+    ];
+
+    // Offsets on COMMON_PATH for each team start
+    const START_OFFSET = {
+      red: 0,       // cell (6, 1)
+      green: 13,    // cell (1, 8)
+      yellow: 26,   // cell (8, 13)
+      blue: 39      // cell (13, 6)
+    };
+
+    // Safe Star Cells on COMMON_PATH (standard 8 safe spots)
+    const SAFE_INDICES = [0, 8, 13, 21, 26, 34, 39, 47];
+
+    // 5 Home Run steps entering central triangle (index 0 to 4)
+    const HOME_RUNS = {
+      red:    [{ r: 7, c: 1 }, { r: 7, c: 2 }, { r: 7, c: 3 }, { r: 7, c: 4 }, { r: 7, c: 5 }],
+      green:  [{ r: 1, c: 7 }, { r: 2, c: 7 }, { r: 3, c: 7 }, { r: 4, c: 7 }, { r: 5, c: 7 }],
+      yellow: [{ r: 7, c: 13 }, { r: 7, c: 12 }, { r: 7, c: 11 }, { r: 7, c: 10 }, { r: 7, c: 9 }],
+      blue:   [{ r: 13, c: 7 }, { r: 12, c: 7 }, { r: 11, c: 7 }, { r: 10, c: 7 }, { r: 9, c: 7 }]
+    };
+
+    // Yard slot coordinates for 4 tokens per player
+    const YARD_COORDS = {
+      red:    [{ r: 2, c: 2 }, { r: 2, c: 3 }, { r: 3, c: 2 }, { r: 3, c: 3 }],
+      green:  [{ r: 2, c: 11 }, { r: 2, c: 12 }, { r: 3, c: 11 }, { r: 3, c: 12 }],
+      yellow: [{ r: 11, c: 11 }, { r: 11, c: 12 }, { r: 12, c: 11 }, { r: 12, c: 12 }],
+      blue:   [{ r: 11, c: 2 }, { r: 11, c: 3 }, { r: 12, c: 2 }, { r: 12, c: 3 }]
+    };
+
+    // Central Home destination cell coordinates
+    const CENTER_DEST = {
+      red:    { r: 7, c: 6 },
+      green:  { r: 6, c: 7 },
+      yellow: { r: 7, c: 8 },
+      blue:   { r: 8, c: 7 }
+    };
+
+    // Game State
+    let players = {
+      red:    { active: true, name: 'RED CYBER', isBot: false, score: 0, captures: 0, tokens: [-1, -1, -1, -1] },
+      green:  { active: true, name: 'GREEN MATRIX', isBot: true, score: 0, captures: 0, tokens: [-1, -1, -1, -1] },
+      yellow: { active: true, name: 'YELLOW SOLAR', isBot: true, score: 0, captures: 0, tokens: [-1, -1, -1, -1] },
+      blue:   { active: true, name: 'BLUE NEON', isBot: true, score: 0, captures: 0, tokens: [-1, -1, -1, -1] }
+    };
+
+    let activeColors = ['red', 'green', 'yellow', 'blue'];
+    let currentTurnIndex = 0;
+    let diceValue = null;
+    let hasRolled = false;
+    let consecutiveSixes = 0;
+    let isAnimatingMove = false;
+    let gameWon = false;
+    let totalRoundsPlayed = 0;
+
+    // Canvas & Sizing
+    const canvas = document.getElementById('ludoCanvas');
+    const ctx = canvas.getContext('2d');
+    let cellSize = 0;
+    let boardOffset = { x: 0, y: 0 };
+
+    // Particles system
+    let particles = [];
+
+    // UI Hooks
+    const diceRollArea = document.getElementById('diceRollArea');
+    const diceCube = document.getElementById('diceCube');
+    const btnRollDice = document.getElementById('btnRollDice');
+    const currentTurnBadge = document.getElementById('currentTurnBadge');
+    const turnInstruction = document.getElementById('turnInstruction');
+    const gameNotification = document.getElementById('gameNotification');
+    const playerRoster = document.getElementById('playerRoster');
+
+    // Modals
+    const modalSetup = document.getElementById('modalSetup');
+    const btnGameConfig = document.getElementById('btnGameConfig');
+    const btnCloseSetup = document.getElementById('btnCloseSetup');
+    const btnSaveConfig = document.getElementById('btnSaveConfig');
+    const teamEditList = document.getElementById('teamEditList');
+
+    const modalWinners = document.getElementById('modalWinners');
+    const btnWinnersHistory = document.getElementById('btnWinnersHistory');
+    const btnCloseWinners = document.getElementById('btnCloseWinners');
+    const btnCloseWinnersFooter = document.getElementById('btnCloseWinnersFooter');
+    const btnClearWinners = document.getElementById('btnClearWinners');
+    const winnersListContainer = document.getElementById('winnersListContainer');
+
+    const modalVictory = document.getElementById('modalVictory');
+    const victoryWinnerTitle = document.getElementById('victoryWinnerTitle');
+    const victoryTurns = document.getElementById('victoryTurns');
+    const victoryKills = document.getElementById('victoryKills');
+    const btnPlayAgain = document.getElementById('btnPlayAgain');
+
+    const btnSoundToggle = document.getElementById('btnSoundToggle');
+    const btnResetGame = document.getElementById('btnResetGame');
+
+    // Setup Notification Banner
+    function showNotification(msg) {
+      gameNotification.textContent = msg;
+      gameNotification.style.opacity = '1';
+      gameNotification.style.transform = 'translate(-50%, 0) scale(1)';
+      setTimeout(() => {
+        gameNotification.style.opacity = '0';
+        gameNotification.style.transform = 'translate(-50%, -10px) scale(0.9)';
+      }, 1600);
+    }
+
+    // Audio SFX Toggle
+    btnSoundToggle.addEventListener('click', () => {
+      sound.init();
+      sound.enabled = !sound.enabled;
+      btnSoundToggle.textContent = sound.enabled ? '🔊 SFX' : '🔇 MUTED';
+      btnSoundToggle.classList.toggle('border-cyan-400', sound.enabled);
+    });
+
+    // Particle FX Generator
+    function createBurst(x, y, color, count = 20) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 5 + 2;
+        particles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: color,
+          size: Math.random() * 4 + 2,
+          life: 1.0,
+          decay: Math.random() * 0.03 + 0.02
+        });
+      }
+    }
+
+    // Canvas Resize Observer
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cellSize = rect.width / 15;
+    }
+
+    window.addEventListener('resize', () => {
+      resizeCanvas();
+    });
+
+    // -------------------------------------------------------------
+    // Board Drawing Logic
+    // -------------------------------------------------------------
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Grid Background
+      ctx.fillStyle = '#0a0a14';
+      ctx.fillRect(0, 0, cellSize * 15, cellSize * 15);
+
+      // Draw 4 Quadrant Yard Bases
+      drawYardBase(0, 0, COLORS.RED);
+      drawYardBase(9, 0, COLORS.GREEN);
+      drawYardBase(9, 9, COLORS.YELLOW);
+      drawYardBase(0, 9, COLORS.BLUE);
+
+      // Draw Track Cells (Common & Home Stretch)
+      for (let r = 0; r < 15; r++) {
+        for (let c = 0; c < 15; c++) {
+          // Skip Yard Interiors
+          if ((r < 6 && c < 6) || (r < 6 && c > 8) || (r > 8 && c < 6) || (r > 8 && c > 8)) {
+            continue;
+          }
+          // Center Triangle Skip
+          if (r >= 6 && r <= 8 && c >= 6 && c <= 8) {
+            continue;
+          }
+
+          drawCell(r, c);
+        }
+      }
+
+      // Draw Central Victory Triangles
+      drawCenterTriangles();
+
+      // Draw Tokens
+      drawAllTokens();
+
+      // Draw Active Move Indicators (Glowing Rings)
+      if (hasRolled && !isAnimatingMove) {
+        highlightMovableTokens();
+      }
+
+      // Render Active Particles
+      drawParticles();
+    }
+
+    // Yard Base Drawing
+    function drawYardBase(startCol, startRow, team) {
+      const x = startCol * cellSize;
+      const y = startRow * cellSize;
+      const w = 6 * cellSize;
+
+      ctx.save();
+      // Outer border box
+      ctx.fillStyle = team.baseColor;
+      ctx.fillRect(x, y, w, w);
+
+      ctx.strokeStyle = team.hex;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = team.hex;
+      ctx.shadowBlur = 12;
+      ctx.strokeRect(x + 2, y + 2, w - 4, w - 4);
+
+      // Inner platform
+      ctx.fillStyle = '#0f172a';
+      ctx.shadowBlur = 0;
+      ctx.fillRect(x + cellSize, y + cellSize, 4 * cellSize, 4 * cellSize);
+      ctx.strokeStyle = team.hex;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + cellSize, y + cellSize, 4 * cellSize, 4 * cellSize);
+
+      // 4 Token Yard Pods
+      const slots = YARD_COORDS[team.id];
+      slots.forEach(slot => {
+        const cx = (slot.c + 0.5) * cellSize;
+        const cy = (slot.r + 0.5) * cellSize;
+
+        ctx.fillStyle = '#05070d';
+        ctx.beginPath();
+        ctx.arc(cx, cy, cellSize * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = team.hex;
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = team.hex;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, cellSize * 0.35, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+
+      ctx.restore();
+    }
+
+    // Individual Cell Drawing
+    function drawCell(r, c) {
+      const x = c * cellSize;
+      const y = r * cellSize;
+
+      ctx.save();
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.4)';
+      ctx.lineWidth = 1;
+
+      // Identify special cell coloring
+      // Red Starting Cell
+      if (r === 6 && c === 1) ctx.fillStyle = 'rgba(255, 0, 85, 0.25)';
+      // Green Starting Cell
+      else if (r === 1 && c === 8) ctx.fillStyle = 'rgba(0, 255, 102, 0.25)';
+      // Yellow Starting Cell
+      else if (r === 8 && c === 13) ctx.fillStyle = 'rgba(255, 230, 0, 0.25)';
+      // Blue Starting Cell
+      else if (r === 13 && c === 6) ctx.fillStyle = 'rgba(0, 243, 255, 0.25)';
+      
+      // Home Run Tracks
+      else if (r === 7 && c >= 1 && c <= 5) {
+        ctx.fillStyle = 'rgba(255, 0, 85, 0.35)';
+        ctx.strokeStyle = COLORS.RED.hex;
+      } else if (c === 7 && r >= 1 && r <= 5) {
+        ctx.fillStyle = 'rgba(0, 255, 102, 0.35)';
+        ctx.strokeStyle = COLORS.GREEN.hex;
+      } else if (r === 7 && c >= 9 && c <= 13) {
+        ctx.fillStyle = 'rgba(255, 230, 0, 0.35)';
+        ctx.strokeStyle = COLORS.YELLOW.hex;
+      } else if (c === 7 && r >= 9 && r <= 13) {
+        ctx.fillStyle = 'rgba(0, 243, 255, 0.35)';
+        ctx.strokeStyle = COLORS.BLUE.hex;
+      }
+
+      ctx.fillRect(x, y, cellSize, cellSize);
+      ctx.strokeRect(x, y, cellSize, cellSize);
+
+      // Check if Safe Star Spot
+      const isSafe = SAFE_INDICES.some(idx => {
+        const pos = COMMON_PATH[idx];
+        return pos.r === r && pos.c === c;
+      });
+
+      if (isSafe) {
+        drawNeonStar(x + cellSize / 2, y + cellSize / 2, cellSize * 0.24, '#ffffff');
+      }
+
+      ctx.restore();
+    }
+
+    // Star icon for safe spots
+    function drawNeonStar(cx, cy, radius, color) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.shadowColor = '#00f3ff';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        ctx.lineTo(
+          cx + radius * Math.cos(((18 + i * 72) * Math.PI) / 180),
+          cy - radius * Math.sin(((18 + i * 72) * Math.PI) / 180)
+        );
+        ctx.lineTo(
+          cx + (radius / 2) * Math.cos(((54 + i * 72) * Math.PI) / 180),
+          cy - (radius / 2) * Math.sin(((54 + i * 72) * Math.PI) / 180)
+        );
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Central Home Triangular Junction
+    function drawCenterTriangles() {
+      const startX = 6 * cellSize;
+      const startY = 6 * cellSize;
+      const size = 3 * cellSize;
+      const center = { x: startX + size / 2, y: startY + size / 2 };
+
+      ctx.save();
+      // Black background
+      ctx.fillStyle = '#05070d';
+      ctx.fillRect(startX, startY, size, size);
+
+      // Red (Left)
+      ctx.fillStyle = 'rgba(255, 0, 85, 0.35)';
+      ctx.strokeStyle = COLORS.RED.hex;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(startX, startY + size);
+      ctx.lineTo(center.x, center.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Green (Top)
+      ctx.fillStyle = 'rgba(0, 255, 102, 0.35)';
+      ctx.strokeStyle = COLORS.GREEN.hex;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(startX + size, startY);
+      ctx.lineTo(center.x, center.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Yellow (Right)
+      ctx.fillStyle = 'rgba(255, 230, 0, 0.35)';
+      ctx.strokeStyle = COLORS.YELLOW.hex;
+      ctx.beginPath();
+      ctx.moveTo(startX + size, startY);
+      ctx.lineTo(startX + size, startY + size);
+      ctx.lineTo(center.x, center.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Blue (Bottom)
+      ctx.fillStyle = 'rgba(0, 243, 255, 0.35)';
+      ctx.strokeStyle = COLORS.BLUE.hex;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY + size);
+      ctx.lineTo(startX + size, startY + size);
+      ctx.lineTo(center.x, center.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Central Portal Hub
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#00f3ff';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, cellSize * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // -------------------------------------------------------------
+    // Token Rendering & Position Math
+    // -------------------------------------------------------------
+    // Step value meanings:
+    // -1 = In Yard base
+    // 0 to 50 = Steps along common track starting from team's START_OFFSET
+    // 51 to 55 = Steps in Home Run track (55 is destination triangle)
+    // 56 = Home Completed / Scored
+    function getTokenCellCoord(color, stepIndex, tokenIndex) {
+      if (stepIndex === -1) {
+        return YARD_COORDS[color][tokenIndex];
+      }
+      if (stepIndex >= 0 && stepIndex <= 50) {
+        const trackIdx = (START_OFFSET[color] + stepIndex) % 52;
+        return COMMON_PATH[trackIdx];
+      }
+      if (stepIndex >= 51 && stepIndex <= 55) {
+        const homeIdx = stepIndex - 51;
+        return HOME_RUNS[color][homeIdx];
+      }
+      if (stepIndex >= 56) {
+        return CENTER_DEST[color];
+      }
+      return { r: 7, c: 7 };
+    }
+
+    function drawAllTokens() {
+      // Group tokens sharing same coordinates so they don't occlude completely
+      const occupiedMap = {};
+
+      activeColors.forEach(color => {
+        const p = players[color];
+        p.tokens.forEach((step, tIdx) => {
+          if (step === 56) return; // Completed tokens rest inside center triangle
+          const coord = getTokenCellCoord(color, step, tIdx);
+          const key = `${coord.r},${coord.c}`;
+          if (!occupiedMap[key]) occupiedMap[key] = [];
+          occupiedMap[key].push({ color, tIdx, step });
+        });
+      });
+
+      // Draw tokens with offsets if grouped
+      Object.keys(occupiedMap).forEach(key => {
+        const group = occupiedMap[key];
+        const [r, c] = key.split(',').map(Number);
+        const baseCx = (c + 0.5) * cellSize;
+        const baseCy = (r + 0.5) * cellSize;
+
+        group.forEach((item, idx) => {
+          let cx = baseCx;
+          let cy = baseCy;
+          let radius = cellSize * 0.32;
+
+          if (group.length > 1 && item.step !== -1) {
+            radius = cellSize * 0.22;
+            const angle = (idx / group.length) * Math.PI * 2;
+            cx += Math.cos(angle) * (cellSize * 0.2);
+            cy += Math.sin(angle) * (cellSize * 0.2);
+          }
+
+          drawSingleToken(cx, cy, radius, COLORS[item.color.toUpperCase()], item.tIdx);
+        });
+      });
+    }
+
+    function drawSingleToken(cx, cy, radius, team, tIdx) {
+      ctx.save();
+      // Outer Neon Aura
+      ctx.shadowColor = team.hex;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = team.hex;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner Core
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.72, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Gem Center
+      ctx.fillStyle = team.lightHex;
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // Highlight Movable Tokens
+    function highlightMovableTokens() {
+      const activeColor = activeColors[currentTurnIndex];
+      const p = players[activeColor];
+      const validMoves = getMovableTokenIndices(activeColor, diceValue);
+
+      const animPulse = Math.sin(Date.now() / 150) * (cellSize * 0.08);
+
+      validMoves.forEach(tIdx => {
+        const step = p.tokens[tIdx];
+        const coord = getTokenCellCoord(activeColor, step, tIdx);
+        const cx = (coord.c + 0.5) * cellSize;
+        const cy = (coord.r + 0.5) * cellSize;
+        const r = cellSize * 0.42 + animPulse;
+
+        ctx.save();
+        ctx.strokeStyle = '#ffffff';
+        ctx.shadowColor = COLORS[activeColor.toUpperCase()].hex;
+        ctx.shadowBlur = 14;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    // Render Particles
+    function drawParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.94;
+        p.vy *= 0.94;
+        p.life -= p.decay;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Ludo Movement Rules & Mechanics
+    // -------------------------------------------------------------
+    function canTokenMove(color, step, roll) {
+      // Locked in Yard base
+      if (step === -1) {
+        return roll === 6;
+      }
+      // Common path & Home path
+      const nextStep = step + roll;
+      // 56 is the exact victory threshold
+      return nextStep <= 56;
+    }
+
+    function getMovableTokenIndices(color, roll) {
+      const p = players[color];
+      const valid = [];
+      p.tokens.forEach((step, idx) => {
+        if (canTokenMove(color, step, roll)) {
+          valid.push(idx);
+        }
+      });
+      return valid;
+    }
+
+    // Step-by-Step Hopping Animation
+    async function executeTokenMove(color, tokenIndex, roll) {
+      isAnimatingMove = true;
+      const p = players[color];
+      const currentStep = p.tokens[tokenIndex];
+
+      // If token is moving out of Yard (requires 6)
+      if (currentStep === -1 && roll === 6) {
+        p.tokens[tokenIndex] = 0;
+        sound.tokenOut();
+        const startCoord = getTokenCellCoord(color, 0, tokenIndex);
+        createBurst((startCoord.c + 0.5) * cellSize, (startCoord.r + 0.5) * cellSize, COLORS[color.toUpperCase()].hex, 25);
+        p.score += 10;
+        updatePlayerCards();
+        await sleep(250);
+        postMoveCheck(color, tokenIndex, true);
+        return;
+      }
+
+      // Token stepping step-by-step
+      const targetStep = currentStep + roll;
+      for (let s = currentStep + 1; s <= targetStep; s++) {
+        p.tokens[tokenIndex] = s;
+        sound.tokenStep();
+        const coord = getTokenCellCoord(color, s, tokenIndex);
+        createBurst((coord.c + 0.5) * cellSize, (coord.r + 0.5) * cellSize, COLORS[color.toUpperCase()].lightHex, 4);
+        drawBoard();
+        await sleep(140);
+      }
+
+      p.score += roll * 2;
+      updatePlayerCards();
+
+      // Check if finished home
+      if (p.tokens[tokenIndex] === 56) {
+        sound.homeEntry();
+        showNotification(`${p.name} REACHED HOME! 🌟`);
+        const centerCoord = CENTER_DEST[color];
+        createBurst((centerCoord.c + 0.5) * cellSize, (centerCoord.r + 0.5) * cellSize, '#ffe600', 30);
+        p.score += 50;
+        updatePlayerCards();
+
+        // Check if player won the entire game
+        if (p.tokens.every(st => st === 56)) {
+          handleVictory(color);
+          return;
+        }
+
+        // Home entry gives an extra turn!
+        postMoveCheck(color, tokenIndex, true);
+        return;
+      }
+
+      // Check for Opponent Capture
+      const captured = checkCapture(color, p.tokens[tokenIndex]);
+      if (captured) {
+        sound.capture();
+        showNotification(`LASER CUT! ${p.name} captured an opponent! 💥`);
+        p.captures += 1;
+        p.score += 30;
+        updatePlayerCards();
+        // Capture awards bonus turn!
+        postMoveCheck(color, tokenIndex, true);
+        return;
+      }
+
+      // Bonus turn on Rolling 6
+      const gotBonusTurn = (roll === 6);
+      postMoveCheck(color, tokenIndex, gotBonusTurn);
+    }
+
+    function checkCapture(attackerColor, attackerStep) {
+      // Cannot capture inside home stretch
+      if (attackerStep > 50) return false;
+
+      const attackerTrackIdx = (START_OFFSET[attackerColor] + attackerStep) % 52;
+      
+      // Check if on Safe Star
+      if (SAFE_INDICES.includes(attackerTrackIdx)) {
+        return false;
+      }
+
+      let capturedSomeone = false;
+
+      activeColors.forEach(otherColor => {
+        if (otherColor === attackerColor) return;
+        const opponent = players[otherColor];
+
+        opponent.tokens.forEach((opStep, tIdx) => {
+          if (opStep >= 0 && opStep <= 50) {
+            const opTrackIdx = (START_OFFSET[otherColor] + opStep) % 52;
+            if (opTrackIdx === attackerTrackIdx) {
+              // Send back to Yard!
+              opponent.tokens[tIdx] = -1;
+              const yardPos = YARD_COORDS[otherColor][tIdx];
+              createBurst((yardPos.c + 0.5) * cellSize, (yardPos.r + 0.5) * cellSize, COLORS[otherColor.toUpperCase()].hex, 25);
+              capturedSomeone = true;
+            }
+          }
+        });
+      });
+
+      return capturedSomeone;
+    }
+
+    function postMoveCheck(color, tokenIndex, getsExtraTurn) {
+      isAnimatingMove = false;
+      hasRolled = false;
+
+      if (getsExtraTurn) {
+        showNotification(`${players[color].name} EARNS EXTRA TURN!`);
+        turnInstruction.textContent = 'Extra Turn! Roll again';
+        checkBotTurn();
+      } else {
+        advanceTurn();
+      }
+    }
+
+    function advanceTurn() {
+      consecutiveSixes = 0;
+      currentTurnIndex = (currentTurnIndex + 1) % activeColors.length;
+      hasRolled = false;
+      diceValue = null;
+      updateTurnUI();
+      checkBotTurn();
+    }
+
+    // -------------------------------------------------------------
+    // Dice 3D Animation & Handling
+    // -------------------------------------------------------------
+    const DICE_ROTATIONS = {
+      1: 'rotateY(0deg) rotateX(0deg)',
+      2: 'rotateY(-90deg) rotateX(0deg)',
+      3: 'rotateY(-180deg) rotateX(0deg)',
+      4: 'rotateY(90deg) rotateX(0deg)',
+      5: 'rotateX(-90deg) rotateY(0deg)',
+      6: 'rotateX(90deg) rotateY(0deg)'
+    };
+
+    async function rollDice() {
+      if (hasRolled || isAnimatingMove || gameWon) return;
+
+      sound.init();
+      sound.diceRoll();
+
+      // Trigger 3D Spin CSS
+      diceCube.classList.add('rolling');
+      btnRollDice.disabled = true;
+      turnInstruction.textContent = 'Decentralizing dice...';
+
+      await sleep(550);
+
+      const roll = Math.floor(Math.random() * 6) + 1;
+      diceValue = roll;
+      hasRolled = true;
+
+      diceCube.classList.remove('rolling');
+      diceCube.style.transform = DICE_ROTATIONS[roll];
+
+      const activeColor = activeColors[currentTurnIndex];
+      const p = players[activeColor];
+
+      if (roll === 6) {
+        consecutiveSixes++;
+        if (consecutiveSixes === 3) {
+          showNotification('TRIPLE 6 PENALTY! Turn skipped!');
+          await sleep(800);
+          advanceTurn();
+          btnRollDice.disabled = false;
+          return;
+        }
+      } else {
+        consecutiveSixes = 0;
+      }
+
+      // Evaluate options
+      const movable = getMovableTokenIndices(activeColor, roll);
+
+      if (movable.length === 0) {
+        turnInstruction.textContent = `Rolled a ${roll}. No valid moves!`;
+        showNotification(`NO MOVES FOR ${p.name}`);
+        await sleep(1000);
+        advanceTurn();
+        btnRollDice.disabled = false;
+      } else if (movable.length === 1 && !p.isBot) {
+        // Auto-play the single valid move for user convenience
+        turnInstruction.textContent = `Auto-moving token...`;
+        await sleep(350);
+        executeTokenMove(activeColor, movable[0], roll);
+        btnRollDice.disabled = false;
+      } else if (p.isBot) {
+        turnInstruction.textContent = `${p.name} (AI) thinking...`;
+        await sleep(400);
+        // AI Decision Logic: Prioritize captures > exiting yard > leading token
+        const chosenToken = chooseBestAiMove(activeColor, movable, roll);
+        executeTokenMove(activeColor, chosenToken, roll);
+        btnRollDice.disabled = false;
+      } else {
+        turnInstruction.textContent = `Rolled a ${roll}! Select a highlighted token`;
+        btnRollDice.disabled = false;
+      }
+    }
+
+    // AI Bot Decision Strategy
+    function chooseBestAiMove(color, options, roll) {
+      const p = players[color];
+
+      // 1. Check for immediate capture
+      for (const tIdx of options) {
+        const step = p.tokens[tIdx];
+        if (step >= 0 && step <= 50) {
+          const nextStep = step + roll;
+          if (nextStep <= 50) {
+            const trackIdx = (START_OFFSET[color] + nextStep) % 52;
+            if (!SAFE_INDICES.includes(trackIdx)) {
+              for (const other of activeColors) {
+                if (other === color) continue;
+                if (players[other].tokens.some(s => s >= 0 && s <= 50 && (START_OFFSET[other] + s) % 52 === trackIdx)) {
+                  return tIdx;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Unlock from yard if rolled 6
+      if (roll === 6 && options.some(t => p.tokens[t] === -1)) {
+        return options.find(t => p.tokens[t] === -1);
+      }
+
+      // 3. Move token closest to completing home
+      let best = options[0];
+      let maxStep = -2;
+      for (const t of options) {
+        if (p.tokens[t] > maxStep) {
+          maxStep = p.tokens[t];
+          best = t;
+        }
+      }
+      return best;
+    }
+
+    // Check & trigger Bot turn automatically
+    function checkBotTurn() {
+      if (gameWon) return;
+      const activeColor = activeColors[currentTurnIndex];
+      const p = players[activeColor];
+
+      if (p.isBot) {
+        btnRollDice.disabled = true;
+        turnInstruction.textContent = `${p.name} (BOT) is rolling...`;
+        setTimeout(() => {
+          rollDice();
+        }, 750);
+      } else {
+        btnRollDice.disabled = false;
+      }
+    }
+
+    // Canvas Click / Tap detection for selecting tokens
+    canvas.addEventListener('click', (e) => {
+      if (!hasRolled || isAnimatingMove || gameWon) return;
+
+      const activeColor = activeColors[currentTurnIndex];
+      const p = players[activeColor];
+      if (p.isBot) return; // User cannot click for AI
+
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      const movable = getMovableTokenIndices(activeColor, diceValue);
+
+      for (const tIdx of movable) {
+        const step = p.tokens[tIdx];
+        const coord = getTokenCellCoord(activeColor, step, tIdx);
+        const cx = (coord.c + 0.5) * cellSize;
+        const cy = (coord.r + 0.5) * cellSize;
+
+        const dist = Math.hypot(clickX - cx, clickY - cy);
+        if (dist <= cellSize * 0.55) {
+          executeTokenMove(activeColor, tIdx, diceValue);
+          break;
+        }
+      }
+    });
+
+    // -------------------------------------------------------------
+    // Victory & Winner Storage
+    // -------------------------------------------------------------
+    function handleVictory(winningColor) {
+      gameWon = true;
+      sound.victory();
+      const winner = players[winningColor];
+
+      victoryWinnerTitle.textContent = `${winner.name} WINS!`;
+      victoryWinnerTitle.style.color = COLORS[winningColor.toUpperCase()].hex;
+      victoryTurns.textContent = totalRoundsPlayed;
+      victoryKills.textContent = winner.captures;
+
+      // Confetti storm
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+      }
+
+      // Save to localStorage Hall of Fame
+      saveWinnerRecord({
+        name: winner.name,
+        color: winningColor,
+        score: winner.score,
+        date: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      });
+
+      modalVictory.classList.remove('hidden');
+      modalVictory.classList.add('flex');
+    }
+
+    function saveWinnerRecord(record) {
+      try {
+        const records = JSON.parse(localStorage.getItem('neon_ludo_champions') || '[]');
+        records.unshift(record);
+        if (records.length > 10) records.pop();
+        localStorage.setItem('neon_ludo_champions', JSON.stringify(records));
+      } catch(e) {}
+    }
+
+    function renderWinnersHistory() {
+      winnersListContainer.innerHTML = '';
+      try {
+        const records = JSON.parse(localStorage.getItem('neon_ludo_champions') || '[]');
+        if (records.length === 0) {
+          winnersListContainer.innerHTML = `
+            <div class="text-center py-6 text-slate-500 font-arcade text-xs">
+              NO PREVIOUS CHAMPIONS YET
+            </div>
+          `;
+          return;
+        }
+
+        records.forEach((rec, idx) => {
+          const item = document.createElement('div');
+          item.className = 'flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-arcade';
+          item.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="text-slate-500 font-bold">#${idx + 1}</span>
+              <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${COLORS[rec.color.toUpperCase()]?.hex || '#fff'}"></span>
+              <span class="text-slate-200 font-bold">${escapeHtml(rec.name)}</span>
+            </div>
+            <div class="text-right">
+              <span class="text-yellow-400 font-bold">${rec.score} pts</span>
+              <span class="text-[9px] text-slate-500 block">${rec.date}</span>
+            </div>
+          `;
+          winnersListContainer.appendChild(item);
+        });
+      } catch(e) {}
+    }
+
+    btnClearWinners.addEventListener('click', () => {
+      localStorage.removeItem('neon_ludo_champions');
+      renderWinnersHistory();
+    });
+
+    // -------------------------------------------------------------
+    // UI Panels & Configuration
+    // -------------------------------------------------------------
+    function updateTurnUI() {
+      const activeColor = activeColors[currentTurnIndex];
+      const p = players[activeColor];
+      const meta = COLORS[activeColor.toUpperCase()];
+
+      currentTurnBadge.textContent = `${p.name} TURN`;
+      currentTurnBadge.style.borderColor = meta.hex;
+      currentTurnBadge.style.color = meta.hex;
+      currentTurnBadge.style.boxShadow = `0 0 10px ${meta.hex}`;
+
+      // Update player cards border glow
+      COLOR_KEYS.forEach(k => {
+        const card = document.getElementById(`card-${k}`);
+        if (!card) return;
+        if (k === activeColor) {
+          card.classList.add('active-player-pulse');
+          card.style.borderColor = meta.hex;
+        } else {
+          card.classList.remove('active-player-pulse');
+          card.style.borderColor = 'rgba(51, 65, 85, 0.6)';
+        }
+      });
+    }
+
+    function updatePlayerCards() {
+      playerRoster.innerHTML = '';
+      COLOR_KEYS.forEach(col => {
+        const p = players[col];
+        const meta = COLORS[col.toUpperCase()];
+        const isActive = activeColors.includes(col);
+
+        const card = document.createElement('div');
+        card.id = `card-${col}`;
+        card.className = `p-2 rounded-xl bg-slate-900/90 border transition-all ${isActive ? 'opacity-100' : 'opacity-35'} ${isActive && col === activeColors[currentTurnIndex] ? 'active-player-pulse' : ''}`;
+        card.style.borderColor = isActive ? 'rgba(51, 65, 85, 0.8)' : '#1e293b';
+
+        // Count finished tokens
+        const finishedCount = p.tokens.filter(s => s === 56).length;
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-1.5 truncate">
+              <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${meta.hex}; box-shadow: 0 0 6px ${meta.hex};"></span>
+              <span class="font-arcade text-xs font-bold truncate text-slate-200">${escapeHtml(p.name)}</span>
+            </div>
+            <span class="text-[9px] font-arcade px-1.5 py-0.5 rounded ${p.isBot ? 'bg-purple-950 text-purple-300' : 'bg-cyan-950 text-cyan-300'}">${p.isBot ? 'BOT' : 'HUMAN'}</span>
+          </div>
+          <div class="flex items-center justify-between text-[10px] text-slate-400">
+            <span>Score: <b class="text-slate-200">${p.score}</b></span>
+            <span>Home: <b class="text-yellow-400">${finishedCount}/4</b></span>
+          </div>
+        `;
+
+        playerRoster.appendChild(card);
+      });
+    }
+
+    function renderSetupModal() {
+      teamEditList.innerHTML = '';
+      COLOR_KEYS.forEach(col => {
+        const p = players[col];
+        const meta = COLORS[col.toUpperCase()];
+        const isActive = activeColors.includes(col);
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 p-2 rounded-xl bg-slate-950 border border-slate-800';
+
+        row.innerHTML = `
+          <span class="w-3.5 h-3.5 rounded-full shrink-0" style="background-color: ${meta.hex}; box-shadow: 0 0 6px ${meta.hex};"></span>
+          <input type="text" data-color="${col}" class="player-name-input flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 font-medium focus:border-cyan-400 focus:outline-none" value="${escapeHtml(p.name)}" maxlength="14" />
+          <button data-color="${col}" class="btn-toggle-bot px-2.5 py-1 rounded-lg text-xs font-arcade ${p.isBot ? 'bg-purple-900/60 text-purple-300 border border-purple-600' : 'bg-cyan-900/60 text-cyan-300 border border-cyan-600'}">
+            ${p.isBot ? 'BOT' : 'HUMAN'}
+          </button>
+        `;
+
+        teamEditList.appendChild(row);
+      });
+
+      // Bind Bot Toggle
+      document.querySelectorAll('.btn-toggle-bot').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const col = e.currentTarget.dataset.color;
+          players[col].isBot = !players[col].isBot;
+          renderSetupModal();
+        });
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Modal Events
+    btnGameConfig.addEventListener('click', () => {
+      renderSetupModal();
+      modalSetup.classList.remove('hidden');
+      modalSetup.classList.add('flex');
+    });
+
+    btnCloseSetup.addEventListener('click', () => {
+      modalSetup.classList.add('hidden');
+      modalSetup.classList.remove('flex');
+    });
+
+    // Player Count Preset Buttons
+    document.querySelectorAll('.btn-player-count').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.btn-player-count').forEach(b => {
+          b.className = 'btn-player-count py-1.5 rounded-xl border border-slate-700 text-xs font-arcade text-slate-300';
+        });
+        e.currentTarget.className = 'btn-player-count py-1.5 rounded-xl border border-cyan-400 bg-cyan-500/20 text-cyan-300 text-xs font-arcade';
+        
+        const count = parseInt(e.currentTarget.dataset.playerCount, 10);
+        if (count === 2) {
+          activeColors = ['red', 'yellow'];
+        } else if (count === 3) {
+          activeColors = ['red', 'green', 'yellow'];
+        } else {
+          activeColors = ['red', 'green', 'yellow', 'blue'];
+        }
+      });
+    });
+
+    btnSaveConfig.addEventListener('click', () => {
+      document.querySelectorAll('.player-name-input').forEach(inp => {
+        const col = inp.dataset.color;
+        if (inp.value.trim()) {
+          players[col].name = inp.value.trim().toUpperCase();
+        }
+      });
+      modalSetup.classList.add('hidden');
+      modalSetup.classList.remove('flex');
+      updatePlayerCards();
+      updateTurnUI();
+    });
+
+    // Hall of Fame Modals
+    btnWinnersHistory.addEventListener('click', () => {
+      renderWinnersHistory();
+      modalWinners.classList.remove('hidden');
+      modalWinners.classList.add('flex');
+    });
+
+    const closeWinnersModal = () => {
+      modalWinners.classList.add('hidden');
+      modalWinners.classList.remove('flex');
+    };
+
+    btnCloseWinners.addEventListener('click', closeWinnersModal);
+    btnCloseWinnersFooter.addEventListener('click', closeWinnersModal);
+
+    // Roll Triggers
+    btnRollDice.addEventListener('click', rollDice);
+    diceRollArea.addEventListener('click', rollDice);
+
+    // Reset Game Functionality
+    function resetLudoGame() {
+      COLOR_KEYS.forEach(col => {
+        players[col].tokens = [-1, -1, -1, -1];
+        players[col].score = 0;
+        players[col].captures = 0;
+      });
+      currentTurnIndex = 0;
+      diceValue = null;
+      hasRolled = false;
+      consecutiveSixes = 0;
+      isAnimatingMove = false;
+      gameWon = false;
+      totalRoundsPlayed = 0;
+      particles = [];
+      diceCube.style.transform = 'rotateY(0deg) rotateX(0deg)';
+      updatePlayerCards();
+      updateTurnUI();
+      turnInstruction.textContent = 'Tap Dice to Roll';
+      showNotification('GAME RESET');
+    }
+
+    btnResetGame.addEventListener('click', resetLudoGame);
+    btnPlayAgain.addEventListener('click', () => {
+      modalVictory.classList.add('hidden');
+      modalVictory.classList.remove('flex');
+      resetLudoGame();
+    });
+
+    // Main Animation Render Loop
+    function animationLoop() {
+      drawBoard();
+      requestAnimationFrame(animationLoop);
+    }
+
+    // Startup Initialization
+    window.onload = () => {
+      resizeCanvas();
+      resetLudoGame();
+      requestAnimationFrame(animationLoop);
+    };
+  </script>
+</body>
+</html>
